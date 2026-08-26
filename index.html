@@ -7,6 +7,18 @@
         video, canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
         canvas { z-index: 10; }
     </style>
+     #calbtn {
+         position: absolute;
+         bottom: 20px
+         left: 50%;
+         transform: translateX(-50%);
+         z-index: 20;
+         padding: 15px 30px;
+         font-size: 20px;
+         background-color: #327a62;
+         color: white;
+         border: none;
+
 </head>
 <body>
 
@@ -14,6 +26,20 @@
     <video id="webcam" autoplay playsinline></video>
     <!-- Digital Strike Zone Layer -->
     <canvas id="overlay"></canvas>
+
+    <button id="cal_btn" onclick="takeSnapshot()">Calibrate Target</button>button>
+        </style/>
+            #calbtn {
+                position: absolute;
+                bottom: 20px
+                left: 50%;
+                transform: translateX(-50%);
+                z-index: 20;
+                padding: 15px 30px;
+                font-size: 20px;
+                background-color: #327a62;
+                color: white;
+                border: none;
 
     <script>
         const video = document.getElementById('webcam');
