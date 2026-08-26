@@ -42,6 +42,32 @@
                 border: none;
 
     <script>
+        let baselineBrightness = 0; // Our empty memory box
+
+function takeSnapshot() {
+    // 1. Grab the current image details from inside the strike zone square
+    let boxData = ctx.getImageData(window.innerWidth/3, window.innerHeight/4, window.innerWidth/3, window.innerHeight/2);
+    let pixels = boxData.data;
+    let total = 0;
+
+    // 2. Add up the color values of the background pixels
+    for (let i = 0; i < pixels.length; i += 4) {
+        total += (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
+    }
+
+    // 3. Save the average baseline number into our memory box
+    baselineBrightness = total / (pixels.length / 4);
+    
+    // 4. Turn the button green temporarily so you know it successfully calibrated!
+    document.getElementById('calibrateBtn').style.backgroundColor = "#34C759";
+    document.getElementById('calibrateBtn').innerText = "Calibrated!";
+    
+    setTimeout(() => {
+        document.getElementById('calibrateBtn').style.backgroundColor = "#007AFF";
+        document.getElementById('calibrateBtn').innerText = "Calibrate Target";
+    }, 1500);
+}
+
         const video = document.getElementById('webcam');
         const canvas = document.getElementById('overlay');
         const ctx = canvas.getContext('2d');
