@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DIY Backyard ABS</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; text-align: center; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+        canvas { z-index: 10; }
+    </style>
+</head>
+<body>
+
+    <!-- Camera Feed Layer -->
+    <video id="webcam" autoplay playsinline></video>
+    <!-- Digital Strike Zone Layer -->
+    <canvas id="overlay"></canvas>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('overlay');
+        const ctx = canvas.getContext('2d');
+
+        // Start iPad back camera
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => { video.srcObject = stream; })
+            .catch(err => console.error("Camera error: ", err));
+
+        // Draw static 2D Strike Zone Box once video loads
+        video.addEventListener('loadedmetadata', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Draw a basic white strike zone box in center screen
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = 5;
+            ctx.strokeRect(window.innerWidth/3, window.innerHeight/4, window.innerWidth/3, window.innerHeight/2);
+        });
+    </script>
+</body>
+</html>
