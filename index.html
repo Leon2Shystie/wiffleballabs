@@ -62,32 +62,21 @@
     }
   </style>
   <!-- Load OpenCV.js for Computer Vision -->
-  <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady();"></script>
-</head>
-<body>
-
-  <div id="container">
-    <video id="webcam" autoplay playsinline muted></video>
-    <canvas id="outputCanvas"></canvas>
-    <div id="call-banner">READY</div>
-  </div>
-
-  <div id="controls">
-    <button onclick="resetCall()">RESET CALL</button>
-    <button onclick="toggleTracking()" id="trackBtn">START ABS</button>
-  </div>
-
  <script>
   let video = document.getElementById('webcam');
   let canvas = document.getElementById('outputCanvas');
   let ctx = canvas.getContext('2d');
   let banner = document.getElementById('call-banner');
-  
+
+  // Offscreen canvas for frame differencing
+  let prevCanvas = document.createElement('canvas');
+  let prevCtx = prevCanvas.getContext('2d');
+
   let isTracking = false;
-  let cvReady = false;
   let animId = null;
-  
-  // Strike Zone Percentages
+  let prevFrameData = null;
+
+  // Strike Zone Percentages (Adjust if needed)
   const zone = {
     xMin: 0.35,
     xMax: 0.65,
@@ -95,12 +84,6 @@
     yMax: 0.70,
     margin: 0.05
   };
-
-  function onOpenCvReady() {
-    cvReady = true;
-    banner.innerText = "CAMERA READY";
-    startCamera();
-  }
 
   async function startCamera() {
     try {
@@ -110,34 +93,42 @@
       });
       video.srcObject = stream;
       video.play();
-      
+
       video.addEventListener('loadeddata', () => {
         canvas.width = video.videoWidth || 640;
         canvas.height = video.videoHeight || 480;
+        prevCanvas.width = canvas.width;
+        prevCanvas.height = canvas.height;
         banner.innerText = "READY";
       });
     } catch (err) {
-      alert("Camera Error: Ensure page is HTTPS and permissions allowed.");
+      alert("Camera Error: Ensure HTTPS and permissions are allowed.");
     }
   }
+
+  // Start camera on page load
+  window.onload = startCamera;
 
   function toggleTracking() {
     isTracking = !isTracking;
     document.getElementById('trackBtn').innerText = isTracking ? "PAUSE ABS" : "START ABS";
-    
+
     if (isTracking) {
       renderLoop();
     } else if (animId) {
       cancelAnimationFrame(animId);
+      prevFrameData = null;
     }
   }
 
   function renderLoop() {
     if (!isTracking) return;
 
-    // 1. Draw raw video feed onto canvas
+    // 1. Draw current frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    
+    let currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let currentData = currentFrame.data;
+
     // 2. Define Strike Zone Coordinates
     const szLeft = canvas.width * zone.xMin;
     const szRight = canvas.width * zone.xMax;
@@ -147,51 +138,58 @@
     const szHeight = szBottom - szTop;
     const edgePx = canvas.width * zone.margin;
 
-    // 3. Draw Zone Overlay
-    ctx.strokeStyle = '#00e676'; // Strike zone green
-    ctx.lineWidth = 4;
-    ctx.strokeRect(szLeft, szTop, szWidth, szHeight);
-    
-    ctx.strokeStyle = 'rgba(255, 234, 0, 0.6)'; // Edge zone yellow
-    ctx.lineWidth = 2;
-    ctx.strokeRect(szLeft - edgePx, szTop - edgePx, szWidth + (edgePx * 2), szHeight + (edgePx * 2));
+    // 3. Motion Detection (Frame Differencing)
+    if (prevFrameData) {
+      let totalX = 0, totalY = 0, motionPixels = 0;
 
-    // 4. Lightweight Native Canvas Color Tracking (Prevents iPad Safari crash)
-    let frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    let data = frame.data;
-    let totalX = 0, totalY = 0, count = 0;
+      // Scan for pixels that changed rapidly between frames
+      for (let i = 0; i < currentData.length; i += 16) {
+        let rDiff = Math.abs(currentData[i] - prevFrameData[i]);
+        let gDiff = Math.abs(currentData[i + 1] - prevFrameData[i + 1]);
+        let bDiff = Math.abs(currentData[i + 2] - prevFrameData[i + 2]);
 
-    // Scan pixels for white/bright wiffle ball
-    for (let i = 0; i < data.length; i += 16) { // Step size to save CPU
-      let r = data[i];
-      let g = data[i + 1];
-      let b = data[i + 2];
+        // Threshold for significant motion
+        if (rDiff + gDiff + bDiff > 100) {
+          let pixelIndex = i / 4;
+          let x = pixelIndex % canvas.width;
+          let y = Math.floor(pixelIndex / canvas.width);
 
-      // White wiffle ball threshold (High RGB values)
-      if (r > 200 && g > 200 && b > 200) {
-        let pixelIndex = i / 4;
-        let x = pixelIndex % canvas.width;
-        let y = Math.floor(pixelIndex / canvas.width);
+          totalX += x;
+          totalY += y;
+          motionPixels++;
+        }
+      }
 
-        totalX += x;
-        totalY += y;
-        count++;
+      // If a moving cluster of pixels is detected
+      if (motionPixels > 10 && motionPixels < 2000) {
+        let avgX = totalX / motionPixels;
+        let avgY = totalY / motionPixels;
+
+        // Draw motion marker (Tracked Ball Position)
+        ctx.beginPath();
+        ctx.arc(avgX, avgY, 18, 0, 2 * Math.PI);
+        ctx.fillStyle = '#00e5ff';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Evaluate location against the strike zone
+        evaluatePitch(avgX, avgY, szLeft, szRight, szTop, szBottom, edgePx);
       }
     }
 
-    if (count > 15) { // Minimum threshold of matching pixels
-      let avgX = totalX / count;
-      let avgY = totalY / count;
+    // Save current frame for the next frame comparison
+    prevFrameData = new Uint8ClampedArray(currentData);
 
-      // Draw tracked ball marker
-      ctx.beginPath();
-      ctx.arc(avgX, avgY, 15, 0, 2 * Math.PI);
-      ctx.fillStyle = '#00e5ff';
-      ctx.fill();
+    // 4. Draw Overlay Graphics
+    ctx.strokeStyle = '#00e676'; // Strike zone green
+    ctx.lineWidth = 4;
+    ctx.strokeRect(szLeft, szTop, szWidth, szHeight);
 
-      // Check ball position
-      evaluatePitch(avgX, avgY, szLeft, szRight, szTop, szBottom, edgePx);
-    }
+    ctx.strokeStyle = 'rgba(255, 234, 0, 0.6)'; // Edge zone yellow
+    ctx.lineWidth = 2;
+    ctx.strokeRect(szLeft - edgePx, szTop - edgePx, szWidth + (edgePx * 2), szHeight + (edgePx * 2));
 
     animId = requestAnimationFrame(renderLoop);
   }
