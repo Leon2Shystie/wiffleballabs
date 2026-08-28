@@ -77,148 +77,148 @@
     <button onclick="toggleTracking()" id="trackBtn">START ABS</button>
   </div>
 
-  <script>
-    let video = document.getElementById('webcam');
-    let canvas = document.getElementById('outputCanvas');
-    let ctx = canvas.getContext('2d');
-    let banner = document.getElementById('call-banner');
-    
-    let isTracking = false;
-    let cvReady = false;
-    
-    // Define Strike Zone Boundaries (Percent of Canvas)
-    const zone = {
-      xMin: 0.35,
-      xMax: 0.65,
-      yMin: 0.30,
-      yMax: 0.70,
-      margin: 0.05 // Edge tolerance (5%)
-    };
+ <script>
+  let video = document.getElementById('webcam');
+  let canvas = document.getElementById('outputCanvas');
+  let ctx = canvas.getContext('2d');
+  let banner = document.getElementById('call-banner');
+  
+  let isTracking = false;
+  let cvReady = false;
+  let animId = null;
+  
+  // Strike Zone Percentages
+  const zone = {
+    xMin: 0.35,
+    xMax: 0.65,
+    yMin: 0.30,
+    yMax: 0.70,
+    margin: 0.05
+  };
 
-    function onOpenCvReady() {
-      cvReady = true;
-      banner.innerText = "CAMERA READY";
-      startCamera();
-    }
+  function onOpenCvReady() {
+    cvReady = true;
+    banner.innerText = "CAMERA READY";
+    startCamera();
+  }
 
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", frameRate: { ideal: 60 } },
-          audio: false
-        });
-        video.srcObject = stream;
-        video.onloadedmetadata = () => {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-        };
-      } catch (err) {
-        alert("Camera Access Error: " + err.message);
-      }
-    }
-
-    function toggleTracking() {
-      if (!cvReady) return;
-      isTracking = !isTracking;
-      document.getElementById('trackBtn').innerText = isTracking ? "PAUSE ABS" : "START ABS";
-      if (isTracking) processVideo();
-    }
-
-    function processVideo() {
-      if (!isTracking) return;
-
-      // Draw original camera frame
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  async function startCamera() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      video.srcObject = stream;
+      video.play();
       
-      // Calculate Strike Zone Pixel Coordinates
-      const szLeft = canvas.width * zone.xMin;
-      const szRight = canvas.width * zone.xMax;
-      const szTop = canvas.height * zone.yMin;
-      const szBottom = canvas.height * zone.yMax;
-      const szWidth = szRight - szLeft;
-      const szHeight = szBottom - szTop;
-
-      // Draw Strike Zone Outer Box & Inner Zone
-      ctx.strokeStyle = '#00e676';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(szLeft, szTop, szWidth, szHeight);
-      
-      // Draw Edge Threshold Margin
-      const edgePx = canvas.width * zone.margin;
-      ctx.strokeStyle = 'rgba(255, 234, 0, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(szLeft - edgePx, szTop - edgePx, szWidth + (edgePx * 2), szHeight + (edgePx * 2));
-
-      // OpenCV Motion & Object Detection Logic
-      let src = cv.imread(video);
-      let hsv = new cv.Mat();
-      cv.cvtColor(src, hsv, cv.COLOR_RGBA2RGB);
-      cv.cvtColor(hsv, hsv, cv.COLOR_RGB2HSV);
-
-      // Color Range Thresholding (Set for White/Bright Wiffle Ball)
-      let low = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [0, 0, 200, 0]);
-      let high = new cv.Mat(hsv.rows, hsv.cols, hsv.type(), [180, 55, 255, 255]);
-      let mask = new cv.Mat();
-      cv.inRange(hsv, low, high, mask);
-
-      // Find Ball Contours
-      let contours = new cv.MatVector();
-      let hierarchy = new cv.Mat();
-      cv.findContours(mask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
-
-      for (let i = 0; i < contours.size(); ++i) {
-        let cnt = contours.get(i);
-        let circle = cv.minEnclosingCircle(cnt);
-        let area = cv.contourArea(cnt);
-
-        // Filter based on expected ball size in pixels
-        if (area > 100 && area < 5000) {
-          let ballX = circle.center.x;
-          let ballY = circle.center.y;
-          let radius = circle.radius;
-
-          // Highlight tracked ball frame
-          ctx.beginPath();
-          ctx.arc(ballX, ballY, radius, 0, 2 * Math.PI);
-          ctx.fillStyle = 'cyan';
-          ctx.fill();
-
-          // Check Ball Location against Strike Zone
-          evaluatePitch(ballX, ballY, szLeft, szRight, szTop, szBottom, edgePx);
-        }
-      }
-
-      // Cleanup memory
-      src.delete(); hsv.delete(); low.delete(); high.delete(); mask.delete(); contours.delete(); hierarchy.delete();
-
-      requestAnimationFrame(processVideo);
+      video.addEventListener('loadeddata', () => {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
+        banner.innerText = "READY";
+      });
+    } catch (err) {
+      alert("Camera Error: Ensure page is HTTPS and permissions allowed.");
     }
+  }
 
-    function evaluatePitch(x, y, left, right, top, bottom, margin) {
-      // Check if inside zone
-      const isInsideX = x >= left && x <= right;
-      const isInsideY = y >= top && y <= bottom;
+  function toggleTracking() {
+    isTracking = !isTracking;
+    document.getElementById('trackBtn').innerText = isTracking ? "PAUSE ABS" : "START ABS";
+    
+    if (isTracking) {
+      renderLoop();
+    } else if (animId) {
+      cancelAnimationFrame(animId);
+    }
+  }
 
-      // Check if on the edge
-      const isEdgeX = (x >= left - margin && x <= left) || (x >= right && x <= right + margin);
-      const isEdgeY = (y >= top - margin && y <= top) || (y >= bottom && y <= bottom + margin);
+  function renderLoop() {
+    if (!isTracking) return;
 
-      if (isInsideX && isInsideY) {
-        banner.innerText = "STRIKE!";
-        banner.className = "strike";
-      } else if ((isEdgeX && (isInsideY || isEdgeY)) || (isEdgeY && (isInsideX || isEdgeX))) {
-        banner.innerText = "BORDERLINE (EDGE)";
-        banner.className = "edge";
-      } else {
-        banner.innerText = "BALL!";
-        banner.className = "ball";
+    // 1. Draw raw video feed onto canvas
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    
+    // 2. Define Strike Zone Coordinates
+    const szLeft = canvas.width * zone.xMin;
+    const szRight = canvas.width * zone.xMax;
+    const szTop = canvas.height * zone.yMin;
+    const szBottom = canvas.height * zone.yMax;
+    const szWidth = szRight - szLeft;
+    const szHeight = szBottom - szTop;
+    const edgePx = canvas.width * zone.margin;
+
+    // 3. Draw Zone Overlay
+    ctx.strokeStyle = '#00e676'; // Strike zone green
+    ctx.lineWidth = 4;
+    ctx.strokeRect(szLeft, szTop, szWidth, szHeight);
+    
+    ctx.strokeStyle = 'rgba(255, 234, 0, 0.6)'; // Edge zone yellow
+    ctx.lineWidth = 2;
+    ctx.strokeRect(szLeft - edgePx, szTop - edgePx, szWidth + (edgePx * 2), szHeight + (edgePx * 2));
+
+    // 4. Lightweight Native Canvas Color Tracking (Prevents iPad Safari crash)
+    let frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let data = frame.data;
+    let totalX = 0, totalY = 0, count = 0;
+
+    // Scan pixels for white/bright wiffle ball
+    for (let i = 0; i < data.length; i += 16) { // Step size to save CPU
+      let r = data[i];
+      let g = data[i + 1];
+      let b = data[i + 2];
+
+      // White wiffle ball threshold (High RGB values)
+      if (r > 200 && g > 200 && b > 200) {
+        let pixelIndex = i / 4;
+        let x = pixelIndex % canvas.width;
+        let y = Math.floor(pixelIndex / canvas.width);
+
+        totalX += x;
+        totalY += y;
+        count++;
       }
     }
 
-    function resetCall() {
-      banner.innerText = "READY";
-      banner.className = "";
+    if (count > 15) { // Minimum threshold of matching pixels
+      let avgX = totalX / count;
+      let avgY = totalY / count;
+
+      // Draw tracked ball marker
+      ctx.beginPath();
+      ctx.arc(avgX, avgY, 15, 0, 2 * Math.PI);
+      ctx.fillStyle = '#00e5ff';
+      ctx.fill();
+
+      // Check ball position
+      evaluatePitch(avgX, avgY, szLeft, szRight, szTop, szBottom, edgePx);
     }
-  </script>
+
+    animId = requestAnimationFrame(renderLoop);
+  }
+
+  function evaluatePitch(x, y, left, right, top, bottom, margin) {
+    const isInsideX = x >= left && x <= right;
+    const isInsideY = y >= top && y <= bottom;
+
+    const isEdgeX = (x >= left - margin && x <= left) || (x >= right && x <= right + margin);
+    const isEdgeY = (y >= top - margin && y <= top) || (y >= bottom && y <= bottom + margin);
+
+    if (isInsideX && isInsideY) {
+      banner.innerText = "STRIKE!";
+      banner.className = "strike";
+    } else if ((isEdgeX && (isInsideY || isEdgeY)) || (isEdgeY && (isInsideX || isEdgeX))) {
+      banner.innerText = "BORDERLINE (EDGE)";
+      banner.className = "edge";
+    } else {
+      banner.innerText = "BALL!";
+      banner.className = "ball";
+    }
+  }
+
+  function resetCall() {
+    banner.innerText = "READY";
+    banner.className = "";
+  }
+</script>
 </body>
 </html>
