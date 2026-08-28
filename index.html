@@ -18,7 +18,7 @@
     #container {
       position: relative;
       width: 100vw;
-      height: 65vh;
+      height: 75vh;
       display: flex;
       justify-content: center;
       align-items: center;
@@ -43,54 +43,44 @@
     .edge { color: #ffea00; }
     
     #controls {
-      height: 35vh;
+      height: 25vh;
       width: 100%;
       background: #121212;
       display: flex;
       flex-direction: column;
+      justify-content: center;
+      align-items: center;
       padding: 10px;
       box-sizing: border-box;
       z-index: 10;
-      gap: 10px;
+      gap: 15px;
     }
     .btn-row {
       display: flex;
       justify-content: space-around;
       width: 100%;
+      max-width: 500px;
     }
     button {
       background: #2979ff;
       color: white;
       border: none;
-      padding: 12px 20px;
+      padding: 15px 20px;
       font-size: 1.1rem;
       border-radius: 8px;
       font-weight: bold;
     }
-    .slider-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      background: #1e1e1e;
-      padding: 10px;
-      border-radius: 8px;
+    .pick-btn {
+      background: #ff9100;
     }
-    .slider-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.9rem;
-    }
-    .slider-row label {
-      width: 120px;
-    }
-    .slider-row input {
-      flex-grow: 1;
-    }
-    .preset-btn {
-      background: #424242;
-      font-size: 0.85rem;
-      padding: 6px 12px;
+    #colorPreview {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid white;
+      vertical-align: middle;
+      margin-left: 8px;
     }
   </style>
 </head>
@@ -105,26 +95,10 @@
   <div id="controls">
     <div class="btn-row">
       <button onclick="resetCall()">RESET CALL</button>
+      <button class="pick-btn" onclick="enableColorPicker()" id="pickBtn">
+        PICK COLOR <span id="colorPreview"></span>
+      </button>
       <button onclick="toggleTracking()" id="trackBtn">START ABS</button>
-    </div>
-
-    <div class="slider-group">
-      <div class="btn-row">
-        <button class="preset-btn" onclick="setPreset('white')">Preset: White Ball</button>
-        <button class="preset-btn" onclick="setPreset('yellow')">Preset: Yellow Ball</button>
-      </div>
-      <div class="slider-row">
-        <label>Hue (Color): <span id="hueVal">0</span></label>
-        <input type="range" id="hue" min="0" max="360" value="0" oninput="updateSliders()">
-      </div>
-      <div class="slider-row">
-        <label>Hue Range: <span id="hueTolVal">40</span></label>
-        <input type="range" id="hueTol" min="5" max="100" value="40" oninput="updateSliders()">
-      </div>
-      <div class="slider-row">
-        <label>Min Brightness: <span id="brightVal">180</span></label>
-        <input type="range" id="brightness" min="0" max="255" value="180" oninput="updateSliders()">
-      </div>
     </div>
   </div>
 
@@ -135,12 +109,12 @@
     let banner = document.getElementById('call-banner');
 
     let isTracking = false;
+    let isPickingColor = false;
     let animId = null;
 
-    // Detection Settings controlled by Sliders
-    let targetHue = 0;
-    let hueTolerance = 40;
-    let minBrightness = 180;
+    // Selected RGB Target Color
+    let targetRGB = { r: 255, g: 255, b: 255 };
+    let colorTolerance = 45; // Automatic color match radius
 
     const zone = {
       xMin: 0.35,
@@ -163,6 +137,7 @@
           canvas.width = video.videoWidth || 640;
           canvas.height = video.videoHeight || 480;
           banner.innerText = "READY";
+          updateColorPreview();
         });
       } catch (err) {
         alert("Camera Error: Ensure page is loaded over HTTPS.");
@@ -171,30 +146,51 @@
 
     window.onload = startCamera;
 
-    function updateSliders() {
-      targetHue = parseInt(document.getElementById('hue').value);
-      hueTolerance = parseInt(document.getElementById('hueTol').value);
-      minBrightness = parseInt(document.getElementById('brightness').value);
-
-      document.getElementById('hueVal').innerText = targetHue;
-      document.getElementById('hueTolVal').innerText = hueTolerance;
-      document.getElementById('brightVal').innerText = minBrightness;
+    function enableColorPicker() {
+      if (isTracking) toggleTracking();
+      isPickingColor = true;
+      banner.innerText = "TOUCH THE BALL ON SCREEN";
+      banner.className = "edge";
+      
+      // Draw static video frame to allow accurate tapping
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     }
 
-    function setPreset(type) {
-      if (type === 'white') {
-        document.getElementById('hue').value = 0;
-        document.getElementById('hueTol').value = 180;
-        document.getElementById('brightness').value = 200;
-      } else if (type === 'yellow') {
-        document.getElementById('hue').value = 60;
-        document.getElementById('hueTol').value = 30;
-        document.getElementById('brightness').value = 140;
-      }
-      updateSliders();
+    // Touch Event listener to pick color directly from the iPad screen
+    canvas.addEventListener('touchstart', handleCanvasTap);
+    canvas.addEventListener('mousedown', handleCanvasTap);
+
+    function handleCanvasTap(e) {
+      if (!isPickingColor) return;
+      e.preventDefault();
+
+      let rect = canvas.getBoundingClientRect();
+      let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+      let scaleX = canvas.width / rect.width;
+      let scaleY = canvas.height / rect.height;
+
+      let canvasX = Math.floor((clientX - rect.left) * scaleX);
+      let canvasY = Math.floor((clientY - rect.top) * scaleY);
+
+      // Extract RGB values from tapped pixel
+      let pixelData = ctx.getImageData(canvasX, canvasY, 1, 1).data;
+      targetRGB = { r: pixelData[0], g: pixelData[1], b: pixelData[2] };
+
+      updateColorPreview();
+      isPickingColor = false;
+      banner.innerText = "COLOR SET!";
+      banner.className = "ball";
+    }
+
+    function updateColorPreview() {
+      let preview = document.getElementById('colorPreview');
+      preview.style.backgroundColor = `rgb(${targetRGB.r}, ${targetRGB.g}, ${targetRGB.b})`;
     }
 
     function toggleTracking() {
+      if (isPickingColor) isPickingColor = false;
       isTracking = !isTracking;
       document.getElementById('trackBtn').innerText = isTracking ? "PAUSE ABS" : "START ABS";
 
@@ -203,23 +199,6 @@
       } else if (animId) {
         cancelAnimationFrame(animId);
       }
-    }
-
-    // Convert RGB to HSV Hue value (0-360)
-    function getHue(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      let max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h = 0;
-      if (max !== min) {
-        let d = max - min;
-        switch (max) {
-          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-          case g: h = (b - r) / d + 2; break;
-          case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-      }
-      return h * 360;
     }
 
     function renderLoop() {
@@ -239,37 +218,37 @@
 
       let totalX = 0, totalY = 0, matchCount = 0;
 
-      // Scan every 16th byte (step 4 pixels for performance)
+      // Scan every 4th pixel for color similarity
       for (let i = 0; i < data.length; i += 16) {
         let r = data[i];
         let g = data[i + 1];
         let b = data[i + 2];
 
-        // Check brightness threshold
-        let brightness = (r + g + b) / 3;
-        if (brightness >= minBrightness) {
-          let hue = getHue(r, g, b);
-          let hueDiff = Math.abs(hue - targetHue);
+        // Euclidean color distance from chosen target color
+        let distance = Math.sqrt(
+          Math.pow(r - targetRGB.r, 2) +
+          Math.pow(g - targetRGB.g, 2) +
+          Math.pow(b - targetRGB.b, 2)
+        );
 
-          if (hueDiff <= hueTolerance || (360 - hueDiff) <= hueTolerance) {
-            let pixelIndex = i / 4;
-            let x = pixelIndex % canvas.width;
-            let y = Math.floor(pixelIndex / canvas.width);
+        if (distance <= colorTolerance) {
+          let pixelIndex = i / 4;
+          let x = pixelIndex % canvas.width;
+          let y = Math.floor(pixelIndex / canvas.width);
 
-            totalX += x;
-            totalY += y;
-            matchCount++;
-          }
+          totalX += x;
+          totalY += y;
+          matchCount++;
         }
       }
 
-      // Draw tracking circle if enough matching color pixels are found
+      // Draw tracked ball marker if matching pixels are detected
       if (matchCount > 10 && matchCount < 3000) {
         let avgX = totalX / matchCount;
         let avgY = totalY / matchCount;
 
         ctx.beginPath();
-        ctx.arc(avgX, avgY, 16, 0, 2 * Math.PI);
+        ctx.arc(avgX, avgY, 18, 0, 2 * Math.PI);
         ctx.fillStyle = '#00e5ff';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
@@ -279,7 +258,7 @@
         evaluatePitch(avgX, avgY, szLeft, szRight, szTop, szBottom, edgePx);
       }
 
-      // Draw strike zone graphics
+      // Draw strike zone rectangle overlay
       ctx.strokeStyle = '#00e676';
       ctx.lineWidth = 4;
       ctx.strokeRect(szLeft, szTop, szWidth, szHeight);
