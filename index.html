@@ -1,82 +1,88 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>DIY Backyard ABS</title>
-    
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; text-align: center; z-index: 5;}
-        video, canvas { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1;}
-        canvas { z-index: 5; }
-    
-</head>
-<body>
+// Waffle Ball ABS (Automated Ball-Strike) System
+// Track balls, strikes, and outs directly from your browser.
 
-    <!-- Camera Feed Layer -->
-    <video id="webcam" autoplay playsinline></video>
-    <!-- Digital Strike Zone Layer -->
-    <canvas id="overlay"></canvas>
+class WaffleBallABS {
+  constructor(maxBalls = 4, maxStrikes = 3, maxOuts = 3) {
+    this.maxBalls = maxBalls;
+    this.maxStrikes = maxStrikes;
+    this.maxOuts = maxOuts;
 
-    <button id="cal_btn" onclick="takeSnapshot()">Calibrate Target</button>button>
-        </style/>
-            #calbtn {
-                position: absolute;
-                bottom: 20px
-                left: 50%;
-                transform: translateX(-50%);
-                z-index: 20;
-                padding: 15px 30px;
-                font-size: 20px;
-                background-color: #327a62;
-                color: white;
-                border: none;
-                z-index: 10;
-            }
-    <script>
-        let baselineBrightness = 0; // Our empty memory box
+    this.balls = 0;
+    this.strikes = 0;
+    this.outs = 0;
+    this.inning = 1;
+    this.isTopInning = true;
+    this.homeScore = 0;
+    this.awayScore = 0;
+  }
 
-function takeSnapshot() {
-    // 1. Grab the current image details from inside the strike zone square
-    let boxData = ctx.getImageData(window.innerWidth/3, window.innerHeight/4, window.innerWidth/3, window.innerHeight/2);
-    let pixels = boxData.data;
-    let total = 0;
-
-    // 2. Add up the color values of the background pixels
-    for (let i = 0; i < pixels.length; i += 4) {
-        total += (pixels[i] + pixels[i+1] + pixels[i+2]) / 3;
+  // Pitch calls
+  callPitch(result) {
+    if (result === 'ball') {
+      this.balls++;
+      if (this.balls >= this.maxBalls) {
+        console.log('WALK!');
+        this.resetCount();
+      }
+    } else if (result === 'strike') {
+      this.strikes++;
+      if (this.strikes >= this.maxStrikes) {
+        console.log('STRIKE THREE - YOU\'RE OUT!');
+        this.addOut();
+      }
+    } else if (result === 'foul') {
+      if (this.strikes < this.maxStrikes - 1) {
+        this.strikes++;
+      }
+    } else if (result === 'hit' || result === 'out') {
+      if (result === 'out') {
+        this.addOut();
+      } else {
+        this.resetCount();
+      }
     }
+    this.displayStatus();
+  }
 
-    // 3. Save the average baseline number into our memory box
-    baselineBrightness = total / (pixels.length / 4);
-    
-    // 4. Turn the button green temporarily so you know it successfully calibrated!
-    document.getElementById('calibrateBtn').style.backgroundColor = "#34C759";
-    document.getElementById('calibrateBtn').innerText = "Calibrated!";
-    
-    setTimeout(() => {
-        document.getElementById('calibrateBtn').style.backgroundColor = "#007AFF";
-        document.getElementById('calibrateBtn').innerText = "Calibrate Target";
-    }, 1500);
+  addOut() {
+    this.outs++;
+    this.resetCount();
+
+    if (this.outs >= this.maxOuts) {
+      console.log('THREE OUTS - CHANGE SIDES!');
+      this.outs = 0;
+      if (!this.isTopInning) {
+        this.inning++;
+      }
+      this.isTopInning = !this.isTopInning;
+    }
+  }
+
+  addRun(team) {
+    if (team === 'home') this.homeScore++;
+    if (team === 'away') this.awayScore++;
+    this.displayStatus();
+  }
+
+  resetCount() {
+    this.balls = 0;
+    this.strikes = 0;
+  }
+
+  displayStatus() {
+    const half = this.isTopInning ? 'TOP' : 'BOT';
+    console.log(`-----------------------------------`);
+    console.log(`INNING: ${half} ${this.inning} | SCORE: Away ${this.awayScore} - Home ${this.homeScore}`);
+    console.log(`COUNT: ${this.balls} Balls, ${this.strikes} Strikes | OUTS: ${this.outs}`);
+    console.log(`-----------------------------------`);
+  }
 }
 
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('overlay');
-        const ctx = canvas.getContext('2d');
+// Example usage:
+const game = new WaffleBallABS();
 
-        // Start iPad back camera
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => console.error("Camera error: ", err));
-
-        // Draw static 2D Strike Zone Box once video loads
-        video.addEventListener('loadedmetadata', () => {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            
-            // Draw a basic white strike zone box in center screen
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = 5;
-            ctx.strokeRect(window.innerWidth/3, window.innerHeight/4, window.innerWidth/3, window.innerHeight/2);
-        });
-    </script>
-</body>
-</html>
+// Simulate pitches:
+game.callPitch('ball');   // Ball 1
+game.callPitch('strike'); // Ball 1, Strike 1
+game.callPitch('strike'); // Ball 1, Strike 2
+game.callPitch('strike'); // Strikeout! Out 1
