@@ -1,88 +1,99 @@
-// Waffle Ball ABS (Automated Ball-Strike) System
-// Track balls, strikes, and outs directly from your browser.
-
-class WaffleBallABS {
-  constructor(maxBalls = 4, maxStrikes = 3, maxOuts = 3) {
-    this.maxBalls = maxBalls;
-    this.maxStrikes = maxStrikes;
-    this.maxOuts = maxOuts;
-
-    this.balls = 0;
-    this.strikes = 0;
-    this.outs = 0;
-    this.inning = 1;
-    this.isTopInning = true;
-    this.homeScore = 0;
-    this.awayScore = 0;
-  }
-
-  // Pitch calls
-  callPitch(result) {
-    if (result === 'ball') {
-      this.balls++;
-      if (this.balls >= this.maxBalls) {
-        console.log('WALK!');
-        this.resetCount();
-      }
-    } else if (result === 'strike') {
-      this.strikes++;
-      if (this.strikes >= this.maxStrikes) {
-        console.log('STRIKE THREE - YOU\'RE OUT!');
-        this.addOut();
-      }
-    } else if (result === 'foul') {
-      if (this.strikes < this.maxStrikes - 1) {
-        this.strikes++;
-      }
-    } else if (result === 'hit' || result === 'out') {
-      if (result === 'out') {
-        this.addOut();
-      } else {
-        this.resetCount();
-      }
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waffle Ball ABS</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #121212;
+      color: #fff;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
     }
-    this.displayStatus();
-  }
-
-  addOut() {
-    this.outs++;
-    this.resetCount();
-
-    if (this.outs >= this.maxOuts) {
-      console.log('THREE OUTS - CHANGE SIDES!');
-      this.outs = 0;
-      if (!this.isTopInning) {
-        this.inning++;
-      }
-      this.isTopInning = !this.isTopInning;
+    .scoreboard {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
     }
-  }
+    .count {
+      font-size: 3rem;
+      font-weight: bold;
+      color: #00e676;
+    }
+    .btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+    button {
+      background: #2979ff;
+      color: white;
+      border: none;
+      padding: 25px;
+      font-size: 1.5rem;
+      border-radius: 10px;
+      font-weight: bold;
+    }
+    button:active { background: #1565c0; }
+    .strike-btn { background: #ff1744; }
+    .out-btn { background: #d500f9; }
+  </style>
+</head>
+<body>
 
-  addRun(team) {
-    if (team === 'home') this.homeScore++;
-    if (team === 'away') this.awayScore++;
-    this.displayStatus();
-  }
+  <div class="scoreboard">
+    <h1 id="inning">TOP 1</h1>
+    <div class="count" id="countDisplay">0 - 0</div>
+    <h2 id="outsDisplay">Outs: 0</h2>
+  </div>
 
-  resetCount() {
-    this.balls = 0;
-    this.strikes = 0;
-  }
+  <div class="btn-grid">
+    <button onclick="addBall()">BALL</button>
+    <button class="strike-btn" onclick="addStrike()">STRIKE</button>
+    <button onclick="resetCount()">WALK / HIT</button>
+    <button class="out-btn" onclick="addOut()">OUT</button>
+  </div>
 
-  displayStatus() {
-    const half = this.isTopInning ? 'TOP' : 'BOT';
-    console.log(`-----------------------------------`);
-    console.log(`INNING: ${half} ${this.inning} | SCORE: Away ${this.awayScore} - Home ${this.homeScore}`);
-    console.log(`COUNT: ${this.balls} Balls, ${this.strikes} Strikes | OUTS: ${this.outs}`);
-    console.log(`-----------------------------------`);
-  }
-}
+  <script>
+    let balls = 0;
+    let strikes = 0;
+    let outs = 0;
 
-// Example usage:
-const game = new WaffleBallABS();
+    function update() {
+      document.getElementById('countDisplay').innerText = `${balls} B - ${strikes} S`;
+      document.getElementById('outsDisplay').innerText = `Outs: ${outs}`;
+    }
 
-// Simulate pitches:
-game.callPitch('ball');   // Ball 1
-game.callPitch('strike'); // Ball 1, Strike 1
-game.callPitch('strike'); // Ball 1, Strike 2
-game.callPitch('strike'); // Strikeout! Out 1
+    function addBall() {
+      balls++;
+      if (balls >= 4) { alert('WALK!'); resetCount(); }
+      update();
+    }
+
+    function addStrike() {
+      strikes++;
+      if (strikes >= 3) { alert('STRIKE 3 - OUT!'); addOut(); }
+      update();
+    }
+
+    function addOut() {
+      outs++;
+      resetCount();
+      if (outs >= 3) { alert('3 OUTS - CHANGE SIDES!'); outs = 0; }
+      update();
+    }
+
+    function resetCount() {
+      balls = 0;
+      strikes = 0;
+      update();
+    }
+  </script>
+</body>
+</html>
